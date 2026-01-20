@@ -3,229 +3,246 @@ import pandas as pd
 import plotly.express as px
 import folium
 from streamlit_folium import st_folium
-from datetime import datetime
 
-# --- APP 設定 ---
-st.set_page_config(page_title="TabiFam 東京親子遊 2026", page_icon="🇯🇵", layout="wide")
+# --- 1. APP 設定與 Session State 初始化 ---
+st.set_page_config(page_title="TabiFam 東京親子遊", page_icon="🇯🇵", layout="wide")
 
-# --- 自定義 CSS (美化介面) ---
+# 初始化記帳暫存區 (Session State)
+if 'expenses' not in st.session_state:
+    st.session_state['expenses'] = []
+
+# --- 2. 自定義 CSS (手機版優化) ---
 st.markdown("""
 <style>
     .big-font { font-size:20px !important; font-weight: bold; }
-    .food-card { background-color: #f0f2f6; padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 5px solid #ff4b4b; }
-    .nav-btn { background-color: #4285F4; color: white; padding: 5px 10px; border-radius: 5px; text-decoration: none; }
+    .food-card { 
+        background-color: #fff3e0; 
+        padding: 15px; 
+        border-radius: 10px; 
+        margin-bottom: 10px; 
+        border-left: 5px solid #ff9800; 
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    }
+    .metric-card {
+        background-color: #e3f2fd;
+        padding: 10px;
+        border-radius: 8px;
+        text-align: center;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 側邊導航欄 ---
-with st.sidebar:
-    st.title("📱 TabiFam")
-    st.caption("2026/2/28 - 3/5 東京親子行")
-    menu = st.radio("功能選單", ["📅 每日行程", "💰 預算記帳", "🗺️ 景點地圖", "🎒 必備清單"])
-    
-    st.divider()
-    st.info("💡 距離出發還有：399 天 (假設今日為 2025/1)")
-
-# --- 資料數據 (模擬資料庫) ---
+# --- 3. 核心數據 (含美食座標) ---
+# 注意：為了演示，美食座標是基於主地點做的微調模擬
 itinerary_data = {
     "Day 1 (2/28 五)": {
         "title": "抵達與台場散策",
         "stay": "MIMARU 東京 八丁堀",
-        "events": [
-            {"time": "12:00", "event": "抵達成田機場 (BR184)", "icon": "🛬"},
-            {"time": "14:00", "event": "專車接送至飯店 Check-in", "icon": "🏨"},
-            {"time": "15:00", "event": "爸爸：東京國際展示場報到", "icon": "👨"},
-            {"time": "15:30", "event": "媽媽+小孩：台場散步、鋼彈拍照", "icon": "👩‍👦"},
-        ],
+        "loc": [35.6748, 139.7803], # 飯店位置
         "food": [
-            {"name": "Bills 台場", "desc": "世界第一早餐，鬆餅必吃", "price": "¥2,500"},
-            {"name": "Kua'Aina 漢堡", "desc": "夏威夷酪梨漢堡，小孩最愛", "price": "¥1,800"},
-            {"name": "麵屋 翠悅", "desc": "八丁堀濃郁雞白湯拉麵", "price": "¥1,200"}
+            {"name": "Bills 台場", "desc": "世界第一早餐", "price": 2500, "lat": 35.6290, "lon": 139.7735},
+            {"name": "Kua'Aina 漢堡", "desc": "夏威夷酪梨漢堡", "price": 1800, "lat": 35.6275, "lon": 139.7710},
+            {"name": "麵屋 翠悅", "desc": "飯店旁雞白湯", "price": 1200, "lat": 35.6750, "lon": 139.7805}
         ],
-        "loc": [35.6277, 139.7732] # 台場座標
+        "events": [
+            {"time": "12:00", "event": "抵達成田機場", "icon": "🛬"},
+            {"time": "15:30", "event": "台場鋼彈", "icon": "🤖"}
+        ]
     },
     "Day 2 (3/1 六)": {
         "title": "東京馬拉松 & 寶可夢",
         "stay": "MIMARU 東京 八丁堀",
-        "events": [
-            {"time": "08:00", "event": "爸爸：東京馬拉松起跑", "icon": "🏃"},
-            {"time": "11:00", "event": "媽媽+小孩：日本橋寶可夢咖啡", "icon": "☕"},
-            {"time": "15:00", "event": "全家會合 (日本橋/飯店)", "icon": "🤝"},
-            {"time": "18:00", "event": "秋葉原逛街 (Yodobashi)", "icon": "🛍️"},
-        ],
+        "loc": [35.6812, 139.7671], # 東京車站
         "food": [
-            {"name": "Pokemon Cafe", "desc": "需預約，皮卡丘造型餐", "price": "¥3,500"},
-            {"name": "金子半之助", "desc": "日本橋超豪華天丼", "price": "¥1,500"},
-            {"name": "炸牛排 壹貳參", "desc": "秋葉原名店，石板現煎", "price": "¥1,800"}
+            {"name": "Pokemon Cafe", "desc": "皮卡丘造型餐", "price": 3500, "lat": 35.6805, "lon": 139.7740},
+            {"name": "金子半之助", "desc": "豪華天丼", "price": 1500, "lat": 35.6850, "lon": 139.7750},
+            {"name": "炸牛排 壹貳參", "desc": "秋葉原炸牛排", "price": 1800, "lat": 35.7020, "lon": 139.7715}
         ],
-        "loc": [35.6812, 139.7671] # 東京車站/日本橋
+        "events": [
+            {"time": "08:00", "event": "爸爸馬拉松起跑", "icon": "🏃"},
+            {"time": "11:00", "event": "寶可夢咖啡", "icon": "☕"}
+        ]
     },
     "Day 3 (3/2 日)": {
         "title": "富士山一日遊",
         "stay": "MIMARU 東京 八丁堀",
-        "events": [
-            {"time": "07:45", "event": "KKDAY 巴士團集合", "icon": "🚌"},
-            {"time": "10:30", "event": "河口湖、忍野八海", "icon": "🗻"},
-            {"time": "18:00", "event": "返回東京", "icon": "🏙️"},
-        ],
+        "loc": [35.4925, 138.7490], # 河口湖
         "food": [
-            {"name": "ほうとう不動", "desc": "河口湖名物蔬菜烏龍麵", "price": "¥1,100"},
-            {"name": "富士天婦羅", "desc": "現炸天婦羅，CP值高", "price": "¥1,500"},
-            {"name": "Cheese Cake Garden", "desc": "湖畔起司蛋糕", "price": "¥600"}
+            {"name": "ほうとう不動", "desc": "蔬菜烏龍麵", "price": 1100, "lat": 35.5015, "lon": 138.7660},
+            {"name": "富士天婦羅", "desc": "現炸天婦羅", "price": 1500, "lat": 35.4980, "lon": 138.7500}
         ],
-        "loc": [35.4925, 138.7490] # 河口湖
+        "events": [
+            {"time": "10:30", "event": "河口湖/忍野八海", "icon": "🗻"}
+        ]
     },
     "Day 4 (3/3 一)": {
-        "title": "移動日 & 東京巨蛋城",
+        "title": "移動日 & 東京巨蛋",
         "stay": "東京巨蛋飯店",
-        "events": [
-            {"time": "10:00", "event": "退房 & 移動至巨蛋飯店", "icon": "🧳"},
-            {"time": "13:00", "event": "東京巨蛋城遊樂設施", "icon": "🎡"},
-            {"time": "18:00", "event": "飯店附近晚餐", "icon": "🍽️"},
-        ],
+        "loc": [35.7056, 139.7519], # 巨蛋
         "food": [
-            {"name": "Moomin Cafe", "desc": "嚕嚕米陪吃，麵包吃到飽", "price": "¥1,800"},
-            {"name": "敘敘苑 巨蛋店", "desc": "高檔燒肉午間套餐", "price": "¥3,500"},
-            {"name": "Shake Shack", "desc": "紐約漢堡，戶外座位", "price": "¥1,600"}
+            {"name": "Moomin Cafe", "desc": "嚕嚕米陪吃", "price": 1800, "lat": 35.7060, "lon": 139.7530},
+            {"name": "敘敘苑 巨蛋店", "desc": "高檔燒肉午餐", "price": 3500, "lat": 35.7050, "lon": 139.7510}
         ],
-        "loc": [35.7056, 139.7519] # 東京巨蛋
+        "events": [
+            {"time": "13:00", "event": "巨蛋城遊樂設施", "icon": "🎡"}
+        ]
     },
     "Day 5 (3/4 二)": {
-        "title": "明治神宮 & 澀谷夜景",
+        "title": "明治神宮 & 澀谷",
         "stay": "東京巨蛋飯店",
-        "events": [
-            {"time": "10:00", "event": "明治神宮參拜", "icon": "⛩️"},
-            {"time": "12:30", "event": "原宿/表參道午餐", "icon": "🛍️"},
-            {"time": "19:00", "event": "SHIBUYA SKY 夜景", "icon": "🌃"},
-        ],
+        "loc": [35.6580, 139.7016], # 澀谷
         "food": [
-            {"name": "AFURI 原宿", "desc": "柚子鹽拉麵，清爽不膩", "price": "¥1,200"},
-            {"name": "Luke's Lobster", "desc": "表參道龍蝦堡", "price": "¥2,000"},
-            {"name": "挽肉與米", "desc": "炭烤漢堡排 (需搶票)", "price": "¥1,800"}
+            {"name": "AFURI 原宿", "desc": "柚子鹽拉麵", "price": 1200, "lat": 35.6715, "lon": 139.7030},
+            {"name": "Luke's Lobster", "desc": "龍蝦堡", "price": 2000, "lat": 35.6670, "lon": 139.7060},
+            {"name": "挽肉與米", "desc": "炭烤漢堡排", "price": 1800, "lat": 35.6590, "lon": 139.6980}
         ],
-        "loc": [35.6580, 139.7016] # 澀谷
+        "events": [
+            {"time": "10:00", "event": "明治神宮", "icon": "⛩️"},
+            {"time": "19:00", "event": "SHIBUYA SKY", "icon": "🌃"}
+        ]
     },
     "Day 6 (3/5 四)": {
-        "title": "WBC 熱血賽事 & 返台",
+        "title": "WBC 賽事 & 返台",
         "stay": "溫暖的家",
-        "events": [
-            {"time": "10:00", "event": "退房 & 寄放行李", "icon": "🧳"},
-            {"time": "12:00", "event": "WBC 台灣 vs 澳洲", "icon": "⚾"},
-            {"time": "17:30", "event": "前往成田機場", "icon": "🚆"},
-            {"time": "20:20", "event": "BR195 起飛", "icon": "🛫"},
-        ],
+        "loc": [35.7056, 139.7519], # 巨蛋
         "food": [
-            {"name": "Taco Bell", "desc": "方便外帶進球場", "price": "¥900"},
-            {"name": "巨蛋美食街", "desc": "各式日式料理", "price": "¥1,200"},
-            {"name": "壽司三崎港", "desc": "成田機場最後一吃", "price": "¥2,000"}
+            {"name": "Taco Bell", "desc": "方便外帶", "price": 900, "lat": 35.7065, "lon": 139.7525},
+            {"name": "壽司三崎港", "desc": "機場美食", "price": 2000, "lat": 35.7719, "lon": 140.3928}
         ],
-        "loc": [35.7056, 139.7519] # 東京巨蛋
+        "events": [
+            {"time": "12:00", "event": "WBC 台灣vs澳洲", "icon": "⚾"}
+        ]
     }
 }
 
-# --- 頁面邏輯 ---
+# --- 4. 側邊選單 ---
+with st.sidebar:
+    st.title("📱 TabiFam App")
+    menu = st.radio("功能導航", ["📅 行程總覽", "🗺️ 美食地圖", "💰 記帳管家", "🎒 檢查清單"])
+    st.divider()
+    st.info("💡 貼心提醒：地圖上的「橘色叉子」圖示就是美食推薦喔！")
 
-if menu == "📅 每日行程":
-    st.header("📅 您的專屬行程表")
-    
+# --- 5. 頁面邏輯 ---
+
+# === 📅 行程總覽 ===
+if menu == "📅 行程總覽":
+    st.header("📅 每日行程")
     selected_day = st.selectbox("選擇日期", list(itinerary_data.keys()))
     day_data = itinerary_data[selected_day]
     
-    st.subheader(f"{selected_day} | {day_data['title']}")
-    st.info(f"🛌 住宿：{day_data['stay']}")
+    st.subheader(f"{day_data['title']}")
     
-    # 行程時間軸
-    st.markdown("### 🕒 時間軸")
+    # 時間軸
     for item in day_data['events']:
-        with st.expander(f"{item['icon']} {item['time']} - {item['event']}"):
-            st.write("點擊這裡可以查看詳細備註與導航按鈕...")
+        with st.expander(f"{item['icon']} {item['time']} {item['event']}"):
+            st.write(f"行程重點：{item['event']}")
             st.markdown(f"[📍 開啟 Google Maps 導航](https://www.google.com/maps/search/?api=1&query={item['event']})")
 
-    # 美食推薦卡片 (3欄)
-    st.markdown("### 🍱 今日周邊美食推薦")
-    cols = st.columns(3)
-    for i, food in enumerate(day_data['food']):
-        with cols[i]:
-            st.markdown(f"""
-            <div class="food-card">
-                <h4>{food['name']}</h4>
-                <p>{food['desc']}</p>
-                <p><b>預算：{food['price']}</b></p>
+    st.markdown("---")
+    st.markdown("### 🍴 推薦美食")
+    for food in day_data['food']:
+        st.markdown(f"""
+        <div class="food-card">
+            <div style="display:flex; justify-content:space-between;">
+                <b>{food['name']}</b>
+                <span style="color:#ff9800;">¥{food['price']}</span>
             </div>
-            """, unsafe_allow_html=True)
+            <small>{food['desc']}</small>
+        </div>
+        """, unsafe_allow_html=True)
 
-elif menu == "💰 預算記帳":
-    st.header("💰 旅費管家")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        total_budget = st.number_input("總預算 (TWD)", value=100000, step=1000)
-    with col2:
-        current_rate = st.number_input("今日匯率 (JPY/TWD)", value=0.22, format="%.3f")
-
-    st.divider()
-    
-    # 模擬記帳輸入
-    st.subheader("📝 快速記帳")
-    with st.form("expense_form"):
-        c1, c2, c3 = st.columns(3)
-        item = c1.text_input("項目 (如: 晚餐)")
-        amount_jpy = c2.number_input("金額 (JPY)", min_value=0)
-        category = c3.selectbox("類別", ["餐飲", "交通", "購物", "住宿", "娛樂"])
-        submit = st.form_submit_button("新增支出")
-    
-    if submit:
-        st.success(f"已記錄：{item} ¥{amount_jpy}")
-
-    # 模擬數據視覺化
-    st.subheader("📊 消費分析")
-    # 這裡建立假數據來展示圖表
-    df = pd.DataFrame({
-        "Category": ["住宿", "機票", "餐飲", "交通", "購物"],
-        "Amount": [35000, 42000, 15000, 5000, 20000]
-    })
-    fig = px.pie(df, values='Amount', names='Category', title='預算分配預覽 (TWD)')
-    st.plotly_chart(fig)
-
-elif menu == "🗺️ 景點地圖":
-    st.header("🗺️ 行程地圖總覽")
+# === 🗺️ 美食地圖 (新功能) ===
+elif menu == "🗺️ 美食地圖":
+    st.header("🗺️ 景點與美食攻略圖")
     
     # 建立地圖
     m = folium.Map(location=[35.6895, 139.6917], zoom_start=11)
     
-    # 將所有行程點標註上去
+    # 迴圈加入所有標記
     for day, data in itinerary_data.items():
+        # 1. 每日主要景點 (藍色)
         folium.Marker(
             data['loc'], 
-            popup=day, 
-            tooltip=data['title'],
-            icon=folium.Icon(color="red" if "WBC" in data['title'] else "blue", icon="info-sign")
+            popup=f"<b>{day}</b><br>{data['title']}", 
+            icon=folium.Icon(color="blue", icon="info-sign")
         ).add_to(m)
+        
+        # 2. 美食餐廳 (橘色 + 刀叉圖示)
+        for food in data['food']:
+            folium.Marker(
+                [food['lat'], food['lon']],
+                popup=f"<b>{food['name']}</b><br>預算: ¥{food['price']}",
+                tooltip=food['name'],
+                icon=folium.Icon(color="orange", icon="cutlery")
+            ).add_to(m)
 
     st_folium(m, width=700, height=500)
+    st.caption("🔵 藍色：每日主要景點 / 住宿點 | 🟠 橘色：推薦美食餐廳")
 
-elif menu == "🎒 必備清單":
-    st.header("🎒 智慧檢查清單")
+# === 💰 記帳管家 (新功能) ===
+elif menu == "💰 記帳管家":
+    st.header("💰 旅費記帳本")
     
-    tab1, tab2 = st.tabs(["⚾ WBC 觀賽包", "🏃 馬拉松應援包"])
+    # 設定預算
+    c1, c2 = st.columns(2)
+    total_budget = c1.number_input("總預算 (TWD)", value=100000)
+    rate = c2.number_input("匯率 (JPY->TWD)", value=0.22)
     
-    with tab1:
-        st.markdown("### 3/5 東京巨蛋入場檢查")
-        st.warning("⚠️ 注意：東京巨蛋全場無現金交易 (Cashless Only)！")
-        st.checkbox("Suica/Pasmo 餘額充足")
-        st.checkbox("台灣隊球衣 / 國旗")
-        st.checkbox("護照 (免稅/身分查驗)")
-        st.checkbox("未開封寶特瓶 (500ml以下)")
-        st.checkbox("行動電源 (充飽)")
-    
-    with tab2:
-        st.markdown("### 3/1 爸爸加油團")
-        st.checkbox("野餐墊")
-        st.checkbox("爸爸的保暖外套 (完賽用)")
-        st.checkbox("能量果凍飲")
-        st.checkbox("行動電源")
-        st.checkbox("下載 R-navi 追蹤 App")
+    st.divider()
 
-# --- 底部 ---
-st.divider()
-st.caption("Designed for You by Gemini AI | Ver 1.0 Alpha")
+    # 輸入表單
+    st.subheader("📝 新增一筆消費")
+    with st.form("add_expense"):
+        col_a, col_b, col_c = st.columns([2, 1, 1])
+        item_name = col_a.text_input("品項 (如: 拉麵)")
+        amount = col_b.number_input("日幣金額", min_value=0)
+        category = col_c.selectbox("類別", ["餐飲", "交通", "購物", "住宿"])
+        
+        submitted = st.form_submit_button("➕ 加入清單")
+        
+        if submitted and amount > 0:
+            st.session_state['expenses'].append({
+                "品項": item_name,
+                "日幣": amount,
+                "台幣(約)": int(amount * rate),
+                "類別": category
+            })
+            st.success("已儲存！")
+
+    # 顯示統計與列表
+    if st.session_state['expenses']:
+        df = pd.DataFrame(st.session_state['expenses'])
+        
+        # 計算總額
+        total_spent_twd = df["台幣(約)"].sum()
+        remain = total_budget - total_spent_twd
+        
+        # 儀表板
+        m1, m2, m3 = st.columns(3)
+        m1.metric("已花費 (TWD)", f"${total_spent_twd:,}")
+        m2.metric("剩餘預算", f"${remain:,}", delta_color="normal" if remain > 0 else "inverse")
+        m3.metric("消費筆數", len(df))
+        
+        st.markdown("### 🧾 消費明細")
+        st.dataframe(df, use_container_width=True)
+        
+        # 簡單圖表
+        st.markdown("### 📊 花費分佈")
+        fig = px.pie(df, values='台幣(約)', names='類別', hole=0.4)
+        fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=300)
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("目前還沒有消費紀錄，試著輸入第一筆吧！")
+
+# === 🎒 檢查清單 ===
+elif menu == "🎒 檢查清單":
+    st.header("🎒 出發前確認")
+    st.markdown("### 3/5 WBC 特別檢查")
+    st.checkbox("Suica/Pasmo (巨蛋全場無現金!)")
+    st.checkbox("台灣球衣 / 國旗")
+    st.checkbox("行動電源")
+    
+    st.markdown("### 隨身攜帶")
+    st.checkbox("護照")
+    st.checkbox("網卡 /漫遊已開通")
+    st.checkbox("常備藥品 (小孩用)")
